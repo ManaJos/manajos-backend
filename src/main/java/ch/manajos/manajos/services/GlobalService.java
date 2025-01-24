@@ -11,4 +11,5 @@ public class GlobalService {
     public String getGlobal() {
         return "Bienvenue sur notre application!";
     }
+
 }
