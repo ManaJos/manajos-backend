@@ -1,4 +1,0 @@
-# Créez une copie du fichier dans le même dossier et le renomer "application.yaml"
-# Entrez vos informations confidentiels dans application.yaml NE PAS LE FAIRE DANS application-base.yaml
-steam:
-  token-key: YOURTOKEN
