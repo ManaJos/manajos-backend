@@ -13,6 +13,7 @@ import reactor.core.publisher.Mono;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 public class SteamService {
@@ -27,13 +28,43 @@ public class SteamService {
 
     @Cacheable(value = "topGames")
     public List<SteamGameResponse> getTopGames() {
-        return webClient.get()
+        List<SteamGameResponse> games = webClient.get()
                 .uri("/ISteamChartsService/GetMostPlayedGames/v1/")
                 .retrieve()
-                .bodyToMono(TopGamesResponse.class)
-                .block()
-                .getResponse()
-                .getGames();
+                .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
+                .map(response -> parseTopGames(response))
+                .block();
+
+        games.parallelStream().forEach(game -> {
+            try {
+                Map<String, Object> details = webClient.get()
+                        .uri("https://store.steampowered.com/api/appdetails?appids={appId}", game.getAppId())
+                        .retrieve()
+                        .bodyToMono(new ParameterizedTypeReference<Map<String, Map<String, Object>>>() {})
+                        .block()
+                        .get(game.getAppId().toString())
+                        .get("data");
+
+                game.setName((String) details.get("name"));
+            } catch (Exception e) {
+                game.setName("Name unavailable");
+            }
+        });
+
+        return games;
+    }
+
+    private List<SteamGameResponse> parseTopGames(Map<String, Object> response) {
+        Map<String, Object> responseBody = (Map<String, Object>) response.get("response");
+        List<Map<String, Object>> ranks = (List<Map<String, Object>>) responseBody.get("ranks");
+
+        return ranks.stream().map(entry -> {
+            SteamGameResponse game = new SteamGameResponse();
+            game.setAppId(Long.valueOf(entry.get("appid").toString()));
+            game.setPlayerCount(Integer.valueOf(entry.get("peak_in_game").toString()));
+            game.setRank(Integer.valueOf(entry.get("rank").toString()));
+            return game;
+        }).collect(Collectors.toList());
     }
 
     @Cacheable(value = "gameDetails", key = "#appId")
