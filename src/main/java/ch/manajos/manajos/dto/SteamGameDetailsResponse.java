@@ -9,8 +9,4 @@ public class SteamGameDetailsResponse {
     private boolean success;
     @JsonProperty("data")
     private SteamGameDetails data;
-
-    public boolean isSuccess() { return success; }
-    public SteamGameDetails getData() { return data; }
-
 }

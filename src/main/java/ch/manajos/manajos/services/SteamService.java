@@ -1,7 +1,6 @@
 package ch.manajos.manajos.services;
 
 import ch.manajos.manajos.dto.SteamGameDetails;
-import ch.manajos.manajos.dto.SteamGameDetailsResponse;
 import ch.manajos.manajos.dto.SteamGameResponse;
 import ch.manajos.manajos.dto.SteamUserResponse;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -14,7 +13,6 @@ import reactor.core.publisher.Mono;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 
 @Service
 public class SteamService {
@@ -29,11 +27,11 @@ public class SteamService {
 
     @Cacheable(value = "topGames")
     public List<SteamGameResponse> getTopGames() {
-        return Objects.requireNonNull(webClient.get()
-                        .uri("/ISteamChartsService/GetMostPlayedGames/v1/")
-                        .retrieve()
-                        .bodyToMono(TopGamesResponse.class)
-                        .block())
+        return webClient.get()
+                .uri("/ISteamChartsService/GetMostPlayedGames/v1/")
+                .retrieve()
+                .bodyToMono(TopGamesResponse.class)
+                .block()
                 .getResponse()
                 .getGames();
     }
@@ -43,7 +41,7 @@ public class SteamService {
         return webClient.get()
                 .uri("https://store.steampowered.com/api/appdetails?appids={appId}", appId)
                 .retrieve()
-                .bodyToMono(new ParameterizedTypeReference<Map<String, SteamGameDetailsResponse>>() {})
+                .bodyToMono(new ParameterizedTypeReference<Map<String, GameDetailsResponse>>() {})
                 .block()
                 .get(appId.toString())
                 .getData();
@@ -70,6 +68,16 @@ public class SteamService {
             private List<SteamGameResponse> games;
             public List<SteamGameResponse> getGames() { return games; }
         }
+    }
+
+    private static class GameDetailsResponse {
+        @JsonProperty("success")
+        private boolean success;
+        @JsonProperty("data")
+        private SteamGameDetails data;
+
+        public boolean isSuccess() { return success; }
+        public SteamGameDetails getData() { return data; }
     }
 
     private static class UserResponseWrapper {
