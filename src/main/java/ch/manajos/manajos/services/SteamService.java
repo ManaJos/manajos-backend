@@ -1,6 +1,7 @@
 package ch.manajos.manajos.services;
 
 import ch.manajos.manajos.dto.SteamGameDetails;
+import ch.manajos.manajos.dto.SteamGameDetailsResponse;
 import ch.manajos.manajos.dto.SteamGameResponse;
 import ch.manajos.manajos.dto.SteamUserResponse;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -13,6 +14,7 @@ import reactor.core.publisher.Mono;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 @Service
 public class SteamService {
@@ -38,11 +40,12 @@ public class SteamService {
 
     @Cacheable(value = "gameDetails", key = "#appId")
     public SteamGameDetails getGameDetails(Long appId) {
-        return webClient.get()
-                .uri("https://store.steampowered.com/api/appdetails?appids={appId}", appId)
-                .retrieve()
-                .bodyToMono(new ParameterizedTypeReference<Map<String, GameDetailsResponse>>() {})
-                .block()
+        return Objects.requireNonNull(webClient.get()
+                        .uri("https://store.steampowered.com/api/appdetails?appids={appId}", appId)
+                        .retrieve()
+                        .bodyToMono(new ParameterizedTypeReference<Map<String, SteamGameDetailsResponse>>() {
+                        })
+                        .block())
                 .get(appId.toString())
                 .getData();
     }
@@ -68,16 +71,6 @@ public class SteamService {
             private List<SteamGameResponse> games;
             public List<SteamGameResponse> getGames() { return games; }
         }
-    }
-
-    private static class GameDetailsResponse {
-        @JsonProperty("success")
-        private boolean success;
-        @JsonProperty("data")
-        private SteamGameDetails data;
-
-        public boolean isSuccess() { return success; }
-        public SteamGameDetails getData() { return data; }
     }
 
     private static class UserResponseWrapper {
