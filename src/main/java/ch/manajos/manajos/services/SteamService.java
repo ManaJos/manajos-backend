@@ -59,12 +59,16 @@ public class SteamService {
                         if (dataObject instanceof Map) {
                             Map<String, Object> gameData = (Map<String, Object>) dataObject;
                             game.setName((String) gameData.get("name"));
+                            // Extract and set the image URL (e.g., header_image)
+                            game.setImage((String) gameData.get("header_image"));
                         } else {
                             game.setName("Name unavailable");
+                            game.setImage("Image unavailable");
                         }
                     }
                 } catch (Exception e) {
                     game.setName("Name unavailable");
+                    game.setImage("Image unavailable");
                 }
             });
         }
