@@ -1,4 +1,4 @@
-# Steam Integration Service
+# ManaJos backend
 
 This project is a Spring Boot application that integrates with the Steam API to fetch game data and user information. It retrieves the top games, game details, and user information from Steam and exposes them via RESTful endpoints.
 
