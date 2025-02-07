@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -28,41 +29,52 @@ public class SteamService {
 
     @Cacheable(value = "topGames")
     public List<SteamGameResponse> getTopGames() {
+        // 1. Get basic game data
         List<SteamGameResponse> games = webClient.get()
                 .uri("/ISteamChartsService/GetMostPlayedGames/v1/")
                 .retrieve()
-                .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
-                .map(response -> parseTopGames(response))
+                .bodyToMono(new ParameterizedTypeReference<Map<String, Map<String, Object>>>() {})
+                .map(response -> {
+                    Map<String, Object> responseBody = response.get("response");
+                    List<Map<String, Object>> ranks = (List<Map<String, Object>>) responseBody.get("ranks");
+                    return parseTopGames(ranks);
+                })
                 .block();
 
-        games.parallelStream().forEach(game -> {
-            try {
-                Map<String, Object> details = webClient.get()
-                        .uri("https://store.steampowered.com/api/appdetails?appids={appId}", game.getAppId())
-                        .retrieve()
-                        .bodyToMono(new ParameterizedTypeReference<Map<String, Map<String, Object>>>() {})
-                        .block()
-                        .get(game.getAppId().toString())
-                        .get("data");
+        // 2. Enrich with game names
+        if (games != null) {
+            games.parallelStream().forEach(game -> {
+                try {
+                    Map<String, Map<String, Object>> detailsResponse = webClient.get()
+                            .uri("https://store.steampowered.com/api/appdetails?appids={appId}", game.getAppId())
+                            .retrieve()
+                            .bodyToMono(new ParameterizedTypeReference<Map<String, Map<String, Object>>>() {})
+                            .block();
 
-                game.setName((String) details.get("name"));
-            } catch (Exception e) {
-                game.setName("Name unavailable");
-            }
-        });
+                    if (detailsResponse != null && detailsResponse.containsKey(game.getAppId().toString())) {
+                        Object dataObject = detailsResponse.get(game.getAppId().toString()).get("data");
+                        if (dataObject instanceof Map) {
+                            Map<String, Object> gameData = (Map<String, Object>) dataObject;
+                            game.setName((String) gameData.get("name"));
+                        } else {
+                            game.setName("Name unavailable");
+                        }
+                    }
+                } catch (Exception e) {
+                    game.setName("Name unavailable");
+                }
+            });
+        }
 
-        return games;
+        return games != null ? games : Collections.emptyList();
     }
 
-    private List<SteamGameResponse> parseTopGames(Map<String, Object> response) {
-        Map<String, Object> responseBody = (Map<String, Object>) response.get("response");
-        List<Map<String, Object>> ranks = (List<Map<String, Object>>) responseBody.get("ranks");
-
+    private List<SteamGameResponse> parseTopGames(List<Map<String, Object>> ranks) {
         return ranks.stream().map(entry -> {
             SteamGameResponse game = new SteamGameResponse();
-            game.setAppId(Long.valueOf(entry.get("appid").toString()));
-            game.setPlayerCount(Integer.valueOf(entry.get("peak_in_game").toString()));
-            game.setRank(Integer.valueOf(entry.get("rank").toString()));
+            game.setAppId(Long.parseLong(entry.get("appid").toString()));
+            game.setPlayerCount(Integer.parseInt(entry.get("peak_in_game").toString()));
+            game.setRank(Integer.parseInt(entry.get("rank").toString()));
             return game;
         }).collect(Collectors.toList());
     }
