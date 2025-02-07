@@ -18,7 +18,7 @@ This project is a Spring Boot application that integrates with the Steam API to 
 
 1. **Clone the repository:**
 
-   git clone https://github.com/yourusername/your-repo.git
+   git clone https://github.com/ManaJos/manajos-backend/tree/main.git
    cd your-repo
 
 2. **Build the project using Maven:**
