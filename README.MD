@@ -37,16 +37,16 @@ Once the application starts, you can access it at: http://localhost:8080.
 
 Below are the endpoints currently exposed by the application:
 
-### 1. GET `/steam/top-games`
+### 1. GET `/api/steam/top-games`
 
 - **Description:**  
   Retrieves a list of the top games with basic details such as app ID, player count, and rank. The service enriches the game data with the game name by making an additional call to the Steam store API.
 
 - **Example Request:**
 
-  curl http://localhost:8080/steam/top-games
+  curl http://localhost:8080/api/steam/top-games
 
-### 2. GET `/steam/game-details/{appId}`
+### 2. GET `/api/steam/games/{appId}`
 
 - **Description:**  
   Retrieves detailed information for a specific game.
@@ -56,9 +56,9 @@ Below are the endpoints currently exposed by the application:
 
 - **Example Request:**
 
-  curl http://localhost:8080/steam/game-details/730
+  curl http://localhost:8080/api/steam/games/730
 
-### 3. GET `/steam/user-info/{steamId64}`
+### 3. GET `/api/steam/users/{steamId64}`
 
 - **Description:**  
   Retrieves information about a Steam user.
@@ -68,7 +68,7 @@ Below are the endpoints currently exposed by the application:
 
 - **Example Request:**
 
-  curl http://localhost:8080/steam/user-info/76561198000000000
+  curl http://localhost:8080/api/steam/users/76561198188156494
 
 ## Project Details
 
