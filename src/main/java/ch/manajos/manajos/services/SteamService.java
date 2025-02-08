@@ -88,14 +88,29 @@ public class SteamService {
 
     @Cacheable(value = "gameDetails", key = "#appId")
     public SteamGameDetails getGameDetails(Long appId) {
-        return Objects.requireNonNull(webClient.get()
+        // Fetch details from Steam Store API
+        Map<String, SteamGameDetailsResponse> detailsResponse = Objects.requireNonNull(
+                webClient.get()
                         .uri("https://store.steampowered.com/api/appdetails?appids={appId}", appId)
                         .retrieve()
-                        .bodyToMono(new ParameterizedTypeReference<Map<String, SteamGameDetailsResponse>>() {
-                        })
-                        .block())
-                .get(appId.toString())
-                .getData();
+                        .bodyToMono(new ParameterizedTypeReference<Map<String, SteamGameDetailsResponse>>() {})
+                        .block()
+        );
+        SteamGameDetails details = detailsResponse.get(appId.toString()).getData();
+
+        // Get the top games list (this call is cached)
+        List<SteamGameResponse> topGames = getTopGames();
+
+        // Find the matching game in the top games list by appId
+        topGames.stream()
+                .filter(game -> game.getAppId().equals(appId))
+                .findFirst()
+                .ifPresent(match -> {
+                    // Set the peak_in_game (player count) in the details object.
+                    details.setPlayerCount(match.getPlayerCount());
+                });
+
+        return details;
     }
 
     public SteamUserResponse getUserInfo(String steamId64) {
