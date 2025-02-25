@@ -22,7 +22,7 @@ public class SteamGameResponse {
         this.appId = appId;
     }
 
-    public Object getAppId() {
+    public Long getAppId() {
         return appId;
     }
 
