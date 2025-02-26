@@ -11,21 +11,17 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
-import reactor.core.publisher.Mono;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
 public class SteamService {
+
     private final WebClient webClient;
 
     @Value("${steam.api.key}")
@@ -37,14 +33,17 @@ public class SteamService {
     // Directories for caching data
     private static final String TOP_GAMES_CACHE_DIR = "src/main/resources/cache/topGames/";
     private static final String GAME_DETAILS_CACHE_DIR = "src/main/resources/cache/gameDetails/";
-    // Duration limits in milliseconds: 24 hour for top games and 2 week for game details
-    private static final long TOP_GAMES_CACHE_DURATION = 86400000L; // 24 hour in ms
-    private static final long GAME_DETAILS_CACHE_DURATION = 1209600000L; // 2 week in ms
+    // Duration limits in milliseconds: 24 hours for top games and 2 weeks for game details
+    private static final long TOP_GAMES_CACHE_DURATION = 86400000L;
+    private static final long GAME_DETAILS_CACHE_DURATION = 1209600000L;
 
     public SteamService(WebClient webClient) {
         this.webClient = webClient;
     }
 
+    // ----------------------------------------------------------------
+    // 1. Existing: getTopGames()
+    // ----------------------------------------------------------------
     public List<SteamGameResponse> getTopGames() {
         // Try to load cached data first
         List<SteamGameResponse> cachedGames = loadTopGamesCache();
@@ -79,7 +78,6 @@ public class SteamService {
                         if (dataObject instanceof Map) {
                             Map<String, Object> gameData = (Map<String, Object>) dataObject;
                             game.setName((String) gameData.get("name"));
-                            // Set the header image
                             game.setImage((String) gameData.get("header_image"));
                         } else {
                             game.setName("Name unavailable");
@@ -111,6 +109,9 @@ public class SteamService {
         }).collect(Collectors.toList());
     }
 
+    // ----------------------------------------------------------------
+    // 2. Existing: getGameDetails(appId)
+    // ----------------------------------------------------------------
     public SteamGameDetails getGameDetails(Long appId) {
         // Try to load cached game details first
         SteamGameDetails cachedDetails = loadGameDetailsCache(appId);
@@ -140,6 +141,99 @@ public class SteamService {
         return details;
     }
 
+    // ----------------------------------------------------------------
+    // 3. NEW: getPeakHistory(appId, days)
+    // ----------------------------------------------------------------
+    /**
+     * Reads all "topGames_*.json" files, parses the timestamp from the filename,
+     * and returns a list of (timestamp, peak) for the specified appId.
+     */
+    public List<PeakDataPoint> getPeakHistory(Long appId, int days) {
+        File cacheDir = new File(TOP_GAMES_CACHE_DIR);
+        if (!cacheDir.exists()) {
+            return Collections.emptyList();
+        }
+
+        File[] files = cacheDir.listFiles((dir, name) -> name.endsWith(".json"));
+        if (files == null || files.length == 0) {
+            return Collections.emptyList();
+        }
+
+        List<PeakDataPoint> result = new ArrayList<>();
+
+        for (File file : files) {
+            String filename = file.getName(); // e.g. "topGames_1740658015189.json"
+            long fileTimestamp;
+            try {
+                // Extract the number after "topGames_" and before ".json"
+                String timestampStr = filename.substring(
+                        filename.indexOf('_') + 1,
+                        filename.lastIndexOf('.')
+                );
+                fileTimestamp = Long.parseLong(timestampStr);
+            } catch (Exception e) {
+                continue;
+            }
+
+            // Read the JSON array of SteamGameResponse
+            List<SteamGameResponse> gameList;
+            try {
+                gameList = objectMapper.readValue(file, new TypeReference<List<SteamGameResponse>>() {});
+            } catch (IOException e) {
+                continue;
+            }
+
+            // Find the matching appId in that list
+            for (SteamGameResponse game : gameList) {
+                if (game.getAppId().equals(appId)) {
+                    PeakDataPoint pd = new PeakDataPoint(fileTimestamp, game.getPlayerCount());
+                    result.add(pd);
+                    break;
+                }
+            }
+        }
+
+        // Optionally filter by last N days
+        if (days > 0) {
+            long cutoff = System.currentTimeMillis() - (days * 86400000L);
+            result = result.stream()
+                    .filter(pd -> pd.getTimestamp() >= cutoff)
+                    .collect(Collectors.toList());
+        }
+
+        // Sort ascending by timestamp
+        result.sort(Comparator.comparingLong(PeakDataPoint::getTimestamp));
+
+        return result;
+    }
+
+    // Simple POJO for returning (timestamp, peak)
+    public static class PeakDataPoint {
+        private long timestamp;
+        private int peak;
+
+        public PeakDataPoint() {}
+        public PeakDataPoint(long timestamp, int peak) {
+            this.timestamp = timestamp;
+            this.peak = peak;
+        }
+        public long getTimestamp() {
+            return timestamp;
+        }
+        public void setTimestamp(long timestamp) {
+            this.timestamp = timestamp;
+        }
+        public int getPeak() {
+            return peak;
+        }
+        public void setPeak(int peak) {
+            this.peak = peak;
+        }
+    }
+
+    // ----------------------------------------------------------------
+    // 4. Existing: getUserInfo(...)
+    // ----------------------------------------------------------------
     public SteamUserResponse getUserInfo(String steamId64) {
         return webClient.get()
                 .uri("/ISteamUser/GetPlayerSummaries/v2/?key={key}&steamids={id}", steamApiKey, steamId64)
@@ -149,8 +243,9 @@ public class SteamService {
                 .block();
     }
 
-    // --- Caching Helper Methods for topGames ---
-
+    // ----------------------------------------------------------------
+    // 5. Caching Helper Methods for topGames
+    // ----------------------------------------------------------------
     private List<SteamGameResponse> loadTopGamesCache() {
         try {
             File cacheDir = new File(TOP_GAMES_CACHE_DIR);
@@ -162,7 +257,7 @@ public class SteamService {
             if (files == null || files.length == 0) {
                 return null;
             }
-            // Find the most recent file based on lastModified time
+            // Find the most recent file
             File latestFile = Files.list(Paths.get(TOP_GAMES_CACHE_DIR))
                     .map(path -> path.toFile())
                     .max(Comparator.comparingLong(File::lastModified))
@@ -187,7 +282,6 @@ public class SteamService {
             if (!cacheDir.exists()) {
                 cacheDir.mkdirs();
             }
-            // Use a timestamp in the filename so that previous files remain intact
             String filename = "topGames_" + System.currentTimeMillis() + ".json";
             File file = new File(cacheDir, filename);
             objectMapper.writeValue(file, games);
@@ -196,8 +290,9 @@ public class SteamService {
         }
     }
 
-    // --- Caching Helper Methods for gameDetails ---
-
+    // ----------------------------------------------------------------
+    // 6. Caching Helper Methods for gameDetails
+    // ----------------------------------------------------------------
     private SteamGameDetails loadGameDetailsCache(Long appId) {
         try {
             String dirPath = GAME_DETAILS_CACHE_DIR + appId + "/";
@@ -210,7 +305,6 @@ public class SteamService {
             if (files == null || files.length == 0) {
                 return null;
             }
-            // Find the most recent file in the directory
             File latestFile = Files.list(Paths.get(dirPath))
                     .map(path -> path.toFile())
                     .max(Comparator.comparingLong(File::lastModified))
@@ -244,14 +338,13 @@ public class SteamService {
         }
     }
 
-    // --- Response Wrapper Classes ---
-
+    // ----------------------------------------------------------------
+    // 7. Response Wrapper Classes
+    // ----------------------------------------------------------------
     private static class TopGamesResponse {
         @JsonProperty("response")
         private Response response;
-
         public Response getResponse() { return response; }
-
         static class Response {
             @JsonProperty("ranks")
             private List<SteamGameResponse> games;
