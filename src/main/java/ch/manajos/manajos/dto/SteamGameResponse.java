@@ -16,6 +16,9 @@ public class SteamGameResponse {
     private Integer playerCount;
 
     private Integer rank;
+    
+    // New field for price
+    private String price;
 
     // Explicit setters (if Lombok isn't working)
     public void setAppId(Long appId) {
@@ -51,5 +54,14 @@ public class SteamGameResponse {
 
     public void setImage(String image) {
         this.image = image;
+    }
+    
+    // Explicit getter and setter for price
+    public String getPrice() {
+        return price;
+    }
+    
+    public void setPrice(String price) {
+        this.price = price;
     }
 }

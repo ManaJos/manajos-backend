@@ -63,12 +63,12 @@ public class SteamService {
                 })
                 .block();
 
-        // 2. Enrich with game names and images
+        // 2. Enrich with game names, images, and prices
         if (games != null) {
             games.parallelStream().forEach(game -> {
                 try {
                     Map<String, Map<String, Object>> detailsResponse = webClient.get()
-                            .uri("https://store.steampowered.com/api/appdetails?appids={appId}", game.getAppId())
+                            .uri("https://store.steampowered.com/api/appdetails?appids={appId}&cc=us&filters=price_overview", game.getAppId())
                             .retrieve()
                             .bodyToMono(new ParameterizedTypeReference<Map<String, Map<String, Object>>>() {})
                             .block();
@@ -79,14 +79,30 @@ public class SteamService {
                             Map<String, Object> gameData = (Map<String, Object>) dataObject;
                             game.setName((String) gameData.get("name"));
                             game.setImage((String) gameData.get("header_image"));
+                            
+                            // Add price information
+                            if (gameData.containsKey("price_overview")) {
+                                Map<String, Object> priceData = (Map<String, Object>) gameData.get("price_overview");
+                                if (priceData != null && priceData.containsKey("final_formatted")) {
+                                    game.setPrice((String) priceData.get("final_formatted"));
+                                } else {
+                                    game.setPrice("Price unavailable");
+                                }
+                            } else if (gameData.containsKey("is_free") && (Boolean) gameData.get("is_free")) {
+                                game.setPrice("Free");
+                            } else {
+                                game.setPrice("Price unavailable");
+                            }
                         } else {
                             game.setName("Name unavailable");
                             game.setImage("Image unavailable");
+                            game.setPrice("Price unavailable");
                         }
                     }
                 } catch (Exception e) {
                     game.setName("Name unavailable");
                     game.setImage("Image unavailable");
+                    game.setPrice("Price unavailable");
                 }
             });
         }
@@ -362,5 +378,41 @@ public class SteamService {
             private List<SteamUserResponse> players;
             public List<SteamUserResponse> getPlayers() { return players; }
         }
+    }
+
+    /**
+     * Get price information for a game by its Steam App ID
+     * @param appId The Steam App ID
+     * @return The formatted price string or "Price unavailable" if not found
+     */
+    public String getGamePrice(Long appId) {
+        try {
+            Map<String, Map<String, Object>> detailsResponse = webClient.get()
+                    .uri("https://store.steampowered.com/api/appdetails?appids={appId}&cc=us&filters=price_overview", appId)
+                    .retrieve()
+                    .bodyToMono(new ParameterizedTypeReference<Map<String, Map<String, Object>>>() {})
+                    .block();
+
+            if (detailsResponse != null && detailsResponse.containsKey(appId.toString())) {
+                Map<String, Object> responseData = detailsResponse.get(appId.toString());
+                if (responseData.containsKey("data") && responseData.get("data") instanceof Map) {
+                    Map<String, Object> gameData = (Map<String, Object>) responseData.get("data");
+                    
+                    if (gameData.containsKey("price_overview")) {
+                        Map<String, Object> priceData = (Map<String, Object>) gameData.get("price_overview");
+                        if (priceData != null && priceData.containsKey("final_formatted")) {
+                            return (String) priceData.get("final_formatted");
+                        }
+                    } else if (gameData.containsKey("is_free") && (Boolean) gameData.get("is_free")) {
+                        return "Free";
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // Log the error and return default value
+            e.printStackTrace();
+        }
+        
+        return "Price unavailable";
     }
 }
